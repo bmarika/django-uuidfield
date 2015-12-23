@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='django-uuidfield',
+    name='pythree-django-uuidfield',
     version='0.5.0',
     author='David Cramer',
     author_email='dcramer@gmail.com',
