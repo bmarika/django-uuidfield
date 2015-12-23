@@ -3,9 +3,9 @@ import uuid
 from django import forms
 from django.db.models import Field, SubfieldBase
 try:
-    from django.utils.encoding import smart_unicode
+    from django.utils.encoding import smart_str
 except ImportError:
-    from django.utils.encoding import smart_text as smart_unicode
+    from django.utils.encoding import smart_text as smart_str
 
 try:
     # psycopg2 needs us to register the uuid type
@@ -23,6 +23,9 @@ class StringUUID(uuid.UUID):
         super(StringUUID, self).__init__(*args, **kwargs)
 
     def __str__(self):
+        return str(str(self))
+
+    def __str__(self):
         if self.hyphenate:
             return super(StringUUID, self).__str__()
 
@@ -34,30 +37,23 @@ class StringUUID(uuid.UUID):
 
 class UUIDField(Field):
     """
-    A field which stores a UUID value in hex format. This may also have the
-    Boolean attribute 'auto' which will set the value on initial save to a new
-    UUID value. Note that while all UUIDs are expected to be unique we enforce
-    this with a DB constraint.
+    A field which stores a UUID value in hex format. This may also have
+    the Boolean attribute 'auto' which will set the value on initial save to a
+    new UUID value (calculated using the UUID1 method). Note that while all
+    UUIDs are expected to be unique we enforce this with a DB constraint.
     """
     # TODO: support binary storage types
     __metaclass__ = SubfieldBase
 
     def __init__(self, version=4, node=None, clock_seq=None,
-                 namespace=None, name=None, auto=False, hyphenate=False,
-                 *args, **kwargs):
-        assert version in (1, 3, 4, 5), "UUID version {ver}is not supported."\
-            .format(ver=version)
+                 namespace=None, name=None, auto=False,
+                 hyphenate=False, *args, **kwargs):
+        assert version in (1, 3, 4, 5), "UUID version %s is not supported." % version
         self.auto = auto
         self.version = version
         self.hyphenate = hyphenate
-
-        if hyphenate:
-            # We store UUIDs in string format, which is fixed at 36 characters.
-            kwargs['max_length'] = 36
-        else:
-            # We store UUIDs in hex format, which is fixed at 32 characters.
-            kwargs['max_length'] = 32
-
+        # We store UUIDs in hex format, which is fixed at 32 characters.
+        kwargs['max_length'] = 32
         if auto:
             # Do not let the user edit UUIDs if they are auto-assigned.
             kwargs['editable'] = False
@@ -68,31 +64,6 @@ class UUIDField(Field):
         elif version in (3, 5):
             self.namespace, self.name = namespace, name
         super(UUIDField, self).__init__(*args, **kwargs)
-
-    def deconstruct(self):
-        name, path, args, kwargs = super(UUIDField, self).deconstruct()
-        del kwargs['max_length']
-
-        if self.auto:
-            kwargs.pop('editable')
-            kwargs.pop('blank')
-            kwargs.pop('unique')
-            kwargs['auto'] = True
-
-        if self.version != 4:
-            kwargs['version'] = self.version
-        if self.hyphenate:
-            kwargs['hyphenate'] = self.hyphenate
-        if hasattr(self, 'node') and self.node is not None:
-            kwargs['node'] = self.node
-        if hasattr(self, 'clock_seq') and self.clock_seq is not None:
-            kwargs['clock_seq'] = self.clock_seq
-        if hasattr(self, 'namespace') and self.namespace is not None:
-            kwargs['namespace'] = self.namespace
-        if hasattr(self, 'name') and self.name is not None:
-            kwargs['name'] = self.name
-
-        return name, path, args, kwargs
 
     def _create_uuid(self):
         if self.version == 1:
@@ -143,8 +114,7 @@ class UUIDField(Field):
             value = str(value)
         if isinstance(value, str):
             if '-' in value:
-                value = value.replace('-', '')
-            uuid.UUID(value) # raises ValueError with invalid UUID format
+                return value.replace('-', '')
         return value
 
     def value_to_string(self, obj):
@@ -159,14 +129,14 @@ class UUIDField(Field):
         """
         Returns a ``StringUUID`` instance from the value returned by the
         database. This doesn't use uuid.UUID directly for backwards
-        compatibility, as ``StringUUID`` implements ``__unicode__`` with
+        compatibility, as ``StringUUID`` implements ``__str__`` with
         ``uuid.UUID.hex()``.
         """
         if not value:
             return None
         # attempt to parse a UUID including cases in which value is a UUID
         # instance already to be able to get our StringUUID in.
-        return StringUUID(smart_unicode(value), hyphenate=self.hyphenate)
+        return StringUUID(smart_str(value), hyphenate=self.hyphenate)
 
     def formfield(self, **kwargs):
         defaults = {
